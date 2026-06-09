@@ -38,12 +38,18 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          # FIX: Fallback to 'manual-build' if the run wasn't triggered by a Git tag push
           $tag = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -ne "tag") {
+              $tag = "manual-build"
+          }
           Copy-Item README.md, LICENSE publish/
           Compress-Archive -Path publish/* -DestinationPath "POE2Radar-$tag-win-x64.zip" -Force
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # FIX: Dynamically determine tag name or create a generic dispatch tracking marker
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'manual-build' }}
           files: POE2Radar-*-win-x64.zip
           generate_release_notes: true
