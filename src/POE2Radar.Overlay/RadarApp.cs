@@ -657,6 +657,14 @@ public sealed class RadarApp : IDisposable
         if (bestId is not null) ToggleSelectionCore(bestId); 
     }
 
+    private void ClearPathTargets()
+    {
+        lock (_navLock)
+        {
+            _selectedIds.Clear();
+        }
+    }
+
     // ── Restored Delegate Targets For ApiServer Binding ──
     public IReadOnlyList<(string Id, int Slot)> GetNavSelection()
     {
@@ -771,7 +779,7 @@ public sealed class RadarApp : IDisposable
         var player = _state.Player;
         tracker.MarkReplanRequested();
         _replanner.Enqueue(new BackgroundReplanner.Request(
-            id, terrain, ((int)player.X, ((int)player.Y), ((int)goal.X, ((int)goal.Y))));
+            id, terrain, ((int)player.X, (int)player.Y), ((int)goal.X, (int)goal.Y)));
     }
 
     private void RebuildSelectedPaths(List<string> selected)
@@ -958,7 +966,7 @@ public sealed class RadarApp : IDisposable
         foreach (var n in nodes) gridToRel[n.Grid] = new NumVec2(n.X, n.Y);
 
         if (_atlasStartGrid is { } s && gridToRel.TryGetValue(s, out var sp)) _atlasStartPt = sp;
-        if (_atlasGoalGrid is { } g && gridToRel.TryGetValue(gp => gp == g ? (object)gp : null, out var gp)) _atlasEndPt = gp;
+        if (_atlasGoalGrid is { } g && gridToRel.TryGetValue(g, out var gp)) _atlasEndPt = gp;
 
         if (_atlasStartGrid is { } start && _atlasGoalGrid is { } goal)
         {
