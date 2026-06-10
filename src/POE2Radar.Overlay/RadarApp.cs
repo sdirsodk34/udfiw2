@@ -71,9 +71,8 @@ public sealed class RadarApp : IDisposable
     private nint _gameHwnd;
     private volatile bool _shutdown;
 
-    // ── Auto-flask System Permanently Dismantled ──
+    // ── Auto-flask System Disabled ──
     private readonly bool _autoFlask = false; 
-    private DateTime _nextToggleAt = DateTime.MinValue;
     private DateTime _nextPathKeyAt = DateTime.MinValue;
     private DateTime _nextBrowserAt = DateTime.MinValue;
     private float _hpPct = 100f, _manaPct = 100f, _esPct = 100f;
@@ -96,7 +95,6 @@ public sealed class RadarApp : IDisposable
     private readonly object _navLock = new();
     private readonly List<string> _selectedIds = new();                                  
     private List<SelectedPath> _selectedPaths = new();                                   
-    private bool _selectionCapWarned;                                                    
     private nint _navTargetsArea = -1;                                                   
     private readonly Dictionary<uint, List<string>> _zoneSelections = new();
     private readonly List<uint> _zoneOrder = new();                                      
@@ -250,7 +248,6 @@ public sealed class RadarApp : IDisposable
             if (localPlayer != _charNameFor) { _charNameFor = localPlayer; _charName = _live.PlayerName(localPlayer); }
             _cameraMatrix = _live.CameraMatrix(inGameState);
 
-            // Passive Vitals Parsing Only (Keystroke simulation blocks completely removed)
             if (_live.PlayerVitals(localPlayer) is { } v)
             {
                 _hpPct = v.HpPct; _manaPct = v.ManaPct; _esPct = v.EsPct;
@@ -386,7 +383,6 @@ public sealed class RadarApp : IDisposable
 
         if (ctx.Active || _overlayHadContent)
         {
-            _window.TrackGameWindow(_gameHwnd);
             _renderer.Render(ctx);
             _overlayHadContent = ctx.Active;
         }
@@ -579,7 +575,6 @@ public sealed class RadarApp : IDisposable
             if (_selectionAreaHash != 0) RememberZoneSelection(_selectionAreaHash, _selectedIds);
 
             _selectedIds.Clear();
-            _selectionCapWarned = false;
             _selectionAreaHash = _areaHash;
 
             List<string>? remembered = null;
@@ -657,17 +652,29 @@ public sealed class RadarApp : IDisposable
         {
             if (selected.Contains(t.Id)) continue;
             var d = NumVec2.DistanceSquared(t.Grid, player);
-            if (d < bestD) { bestD = d; bestId = t.Id; }
+            if (d < bestD) { d = bestD; bestId = t.Id; }
         }
         if (bestId is not null) ToggleSelectionCore(bestId); 
     }
 
-    private void ClearPathTargets()
+    // ── Restored Delegate Targets For ApiServer Binding ──
+    public IReadOnlyList<(string Id, int Slot)> GetNavSelection()
+    {
+        lock (_navLock)
+        {
+            var list = new List<(string, int)>(_selectedIds.Count);
+            for (var i = 0; i < _selectedIds.Count; i++) list.Add((_selectedIds[i], i));
+            return list;
+        }
+    }
+
+    public void ToggleNavTarget(string id) => ToggleSelectionCore(id);
+
+    public void ClearNavSelection()
     {
         lock (_navLock)
         {
             _selectedIds.Clear();
-            _selectionCapWarned = false;
         }
     }
 
@@ -679,19 +686,8 @@ public sealed class RadarApp : IDisposable
 
         lock (_navLock)
         {
-            if (_selectedIds.Remove(id))
-            {
-                _selectionCapWarned = false;
-            }
-            else if (_selectedIds.Count >= MaxSelectedTargets)
-            {
-                _selectionCapWarned = true;
-                return; 
-            }
-            else
-            {
-                _selectedIds.Add(id);
-            }
+            if (_selectedIds.Remove(id)) return;
+            if (_selectedIds.Count < MaxSelectedTargets) _selectedIds.Add(id);
         }
     }
 
@@ -775,7 +771,7 @@ public sealed class RadarApp : IDisposable
         var player = _state.Player;
         tracker.MarkReplanRequested();
         _replanner.Enqueue(new BackgroundReplanner.Request(
-            id, terrain, ((int)player.X, (int)player.Y), ((int)goal.X, (int)goal.Y)));
+            id, terrain, ((int)player.X, ((int)player.Y), ((int)goal.X, ((int)goal.Y))));
     }
 
     private void RebuildSelectedPaths(List<string> selected)
@@ -962,7 +958,7 @@ public sealed class RadarApp : IDisposable
         foreach (var n in nodes) gridToRel[n.Grid] = new NumVec2(n.X, n.Y);
 
         if (_atlasStartGrid is { } s && gridToRel.TryGetValue(s, out var sp)) _atlasStartPt = sp;
-        if (_atlasGoalGrid is { } g && gridToRel.TryGetValue(g, out var gp)) _atlasEndPt = gp;
+        if (_atlasGoalGrid is { } g && gridToRel.TryGetValue(gp => gp == g ? (object)gp : null, out var gp)) _atlasEndPt = gp;
 
         if (_atlasStartGrid is { } start && _atlasGoalGrid is { } goal)
         {
@@ -1022,17 +1018,5 @@ public sealed class RadarApp : IDisposable
         _api.Dispose();
         _renderer.Dispose();
         _window.Dispose();
-    }
-}
-
-internal static class ColorExtensions
-{
-    public static bool MakeSafeColor(string input, out string output)
-    {
-        output = input;
-        if (string.IsNullOrWhiteSpace(input)) return false;
-        if (!input.StartsWith('#')) input = "#" + input;
-        if (input.Length == 7 || input.Length == 9) { output = input; return true; }
-        return false;
     }
 }
