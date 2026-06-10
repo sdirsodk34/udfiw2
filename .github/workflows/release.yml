@@ -22,7 +22,6 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      # FIX: We calculate the version outside the script and set it as an Environment Variable
       - name: Set Version Environment Variable
         shell: pwsh
         run: |
@@ -35,15 +34,7 @@ jobs:
       - name: Publish self-contained single-file overlay
         shell: pwsh
         run: |
-          dotnet publish src/POE2Radar.Overlay/POE2Radar.Overlay.csproj `
-            -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:Version=$env:BUILD_VERSION `
-            -p:DebugType=none -p:DebugSymbols=false `
-            -p:Deterministic=true -p:ContinuousIntegrationBuild=true `
-            -o publish
+          dotnet publish src/POE2Radar.Overlay/POE2Radar.Overlay.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:Version=$env:BUILD_VERSION -p:DebugType=none -p:DebugSymbols=false -p:Deterministic=true -p:ContinuousIntegrationBuild=true -o publish
           Remove-Item publish/*.pdb -Force -ErrorAction SilentlyContinue
 
       - name: Package
