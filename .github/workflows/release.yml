@@ -25,9 +25,12 @@ jobs:
       - name: Publish self-contained single-file overlay
         shell: pwsh
         run: |
-          # Derive the baked-in assembly version straight from the tag (v0.8.1 -> 0.8.1) so the
-          # binary can never disagree with the release it ships in, regardless of the csproj value.
+          # FIX: Fallback to a safe numeric version layout if triggered manually via the UI button
           $ver = "${{ github.ref_name }}".TrimStart('v')
+          if ("${{ github.ref_type }}" -ne "tag") {
+              $ver = "0.0.1-manual"
+          }
+          
           dotnet publish src/POE2Radar.Overlay/POE2Radar.Overlay.csproj `
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true `
@@ -42,12 +45,18 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          # FIX: Prevent blank/branch variables from corrupting the archive zip filename naming matrix
           $tag = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -ne "tag") {
+              $tag = "manual-build"
+          }
           Copy-Item README.md, LICENSE publish/
           Compress-Archive -Path publish/* -DestinationPath "POE2Radar-$tag-win-x64.zip" -Force
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # FIX: Explicit target marker ensures the manual artifact hooks into a dedicated pipeline bucket
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'manual-build' }}
           files: POE2Radar-*-win-x64.zip
           generate_release_notes: true
